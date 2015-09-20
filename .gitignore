@@ -1,0 +1,10 @@
+# Ignore everything in this directory
+target
+.classpath
+.settings
+.project
+*.i??
+.idea
+atlassian-ide-plugin.xml
+pom.xml.versionsBackup
+*.versionsBackup
