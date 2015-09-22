@@ -21,6 +21,9 @@ public interface SearchConstants {
     String SERVICE_VERSION = "overview_version";
     String MEDIA_TYPE = "mediaType";
     String SERVICE_ENDPOINT_ENTRY = "endpoints_entry";
+    String ENDPOINT_NAMESPACE = "http://www.wso2.org/governance/metadata";
+    String ENDPOINT_LOCALNAME = "endpoints";
+    String ENDPOINT_PREFIX = "axis2ns3";
 
     String DEFAULT_SERVICE_MEDIA_TYPE = "application/vnd.wso2-service+xml";
 }

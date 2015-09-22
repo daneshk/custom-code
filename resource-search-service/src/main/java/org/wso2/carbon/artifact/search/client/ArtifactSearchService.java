@@ -15,9 +15,12 @@
  */
 package org.wso2.carbon.artifact.search.client;
 
+import org.apache.axiom.om.OMElement;
+import org.apache.axiom.om.impl.builder.StAXOMBuilder;
 import org.apache.axis2.AxisFault;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
+import org.w3c.dom.Document;
 import org.wso2.carbon.artifact.search.internal.SearchDataHolder;
 import org.wso2.carbon.artifact.search.utils.SearchConstants;
 import org.wso2.carbon.context.CarbonContext;
@@ -29,10 +32,11 @@ import org.wso2.carbon.registry.common.ResourceData;
 import org.wso2.carbon.registry.common.services.RegistryAbstractAdmin;
 import org.wso2.carbon.registry.core.RegistryConstants;
 
-import java.util.HashMap;
-import java.util.LinkedList;
-import java.util.List;
-import java.util.Map;
+import javax.xml.namespace.QName;
+import javax.xml.stream.XMLInputFactory;
+import javax.xml.stream.XMLStreamException;
+import javax.xml.stream.XMLStreamReader;
+import java.util.*;
 
 public class ArtifactSearchService extends RegistryAbstractAdmin {
 
@@ -42,7 +46,7 @@ public class ArtifactSearchService extends RegistryAbstractAdmin {
     public String[] getResultArtifacts(final String serviceName, final String version, final String mediaType)
             throws AxisFault {
 
-        List<String> endpoints = new LinkedList<String>();
+        List<String> endpoints = new ArrayList<String>();
         try {
 
             Map<String, String> listMap = new HashMap<String, String>();
@@ -63,10 +67,21 @@ public class ArtifactSearchService extends RegistryAbstractAdmin {
                 Registry govRegistry = CarbonContext.getThreadLocalCarbonContext().getRegistry(RegistryType.USER_GOVERNANCE);
                 String path = resourceData.getResourcePath().substring(RegistryConstants.GOVERNANCE_REGISTRY_BASE_PATH.length());
                 Resource resource = govRegistry.get(path);
-                endpoints.addAll(resource.getPropertyValues(SearchConstants.SERVICE_ENDPOINT_ENTRY));
+
+                XMLStreamReader streamReader = XMLInputFactory.newInstance().createXMLStreamReader(resource.getContentStream());
+                StAXOMBuilder stAXOMBuilder = new StAXOMBuilder(streamReader);
+                OMElement documentElement = stAXOMBuilder.getDocumentElement();
+                OMElement endpointsList = documentElement.getFirstChildWithName(new QName(SearchConstants.ENDPOINT_NAMESPACE, SearchConstants.ENDPOINT_LOCALNAME, SearchConstants.ENDPOINT_PREFIX));
+                Iterator endpointIter = endpointsList.getChildElements();
+                while (endpointIter.hasNext()) {
+                    OMElement endpoint = (OMElement)endpointIter.next();
+                    endpoints.add(endpoint.getText());
+                }
             }
         } catch (RegistryException ex) {
             log.error("Failed to returnServices ",ex);
+        } catch (XMLStreamException e) {
+            log.error("Failed to returnServices ", e);
         }
 
         return endpoints.toArray(new String[endpoints.size()]);
