@@ -1,7 +1,9 @@
 package org.wso2.carbon.governance.dp.executors;
 
 import org.apache.axiom.om.OMElement;
+import org.apache.axiom.util.base64.Base64Utils;
 import org.apache.commons.io.FilenameUtils;
+import org.apache.commons.lang.SerializationUtils;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.wso2.carbon.context.CarbonContext;
@@ -14,6 +16,7 @@ import org.wso2.carbon.registry.core.Resource;
 import org.wso2.carbon.registry.core.ResourceImpl;
 import org.wso2.carbon.registry.core.exceptions.RegistryException;
 import org.wso2.carbon.registry.core.jdbc.handlers.RequestContext;
+import org.wso2.demo.clients.DataPowerClient;
 import org.wso2.securevault.SecretResolver;
 import org.wso2.securevault.SecretResolverFactory;
 
@@ -30,8 +33,10 @@ public class SoapServiceToDPExecutor implements Execution{
     private String dpEndpoint = null;
     private String dpUsername = null;
     private String dpPassword = null;
+    private String dpDomain = null;
     private String tempDirectoryPath = "/home/daneshk/Desktop/temp/";
     private Registry registry;
+    private DataPowerClient dpClient;
 
     /**
      * This method is called when the execution class is initialized.
@@ -60,8 +65,19 @@ public class SoapServiceToDPExecutor implements Execution{
         if (parameterMap.get(DP_PASSWORD) != null) {
             dpPassword = parameterMap.get(DP_PASSWORD).toString();
         }
+        if (parameterMap.get(DP_DOMAIN) != null) {
+            dpDomain = parameterMap.get(DP_DOMAIN).toString();
+        }
         if (parameterMap.get(DP_TEMP_DIRPATH) != null) {
             tempDirectoryPath = parameterMap.get(DP_TEMP_DIRPATH).toString();
+        }
+
+        dpClient = new DataPowerClient(dpUsername, dpPassword, dpEndpoint, dpDomain);
+        String user = CarbonContext.getThreadLocalCarbonContext().getUsername();
+        try {
+            registry = GovernanceRegistryExtensionsDataHolder.getInstance().getRegistryService().getGovernanceUserRegistry(user, CarbonContext.getThreadLocalCarbonContext().getTenantId());
+        } catch (RegistryException e) {
+            LOG.error("Error while getting registry", e);
         }
     }
 
@@ -76,25 +92,36 @@ public class SoapServiceToDPExecutor implements Execution{
     @Override
     public boolean execute(RequestContext context, String currentState, String targetState) {
         Resource resource = context.getResource();
-
         try {
-            String user = CarbonContext.getThreadLocalCarbonContext().getUsername();
-            registry = GovernanceRegistryExtensionsDataHolder.getInstance().getRegistryService().getGovernanceUserRegistry(user, CarbonContext.getThreadLocalCarbonContext().getTenantId());
             String resourceAbsolutePath = resource.getPath();
             String resourceRelativePath = resourceAbsolutePath.substring("/_system/governance".length());
             writeContentToFile(resource);
-            Resource serviceResource = registry.get(resourceRelativePath);
+            pushContentToDP(dpClient, resource);
 
             Association[] associations = registry.getAllAssociations(resourceRelativePath);
             for(Association assoc: associations) {
                 Resource assocResource = registry.get(assoc.getDestinationPath());
                 writeContentToFile(assocResource);
+                pushContentToDP(dpClient, assocResource);
             }
 
         } catch (RegistryException e) {
             e.printStackTrace();
         }
         return true;
+    }
+
+    private void pushContentToDP(DataPowerClient dpClient, Resource resource) throws RegistryException {
+
+        String filename = ((ResourceImpl) resource).getName();
+        if ("".equals(FilenameUtils.getExtension(filename))) {
+            filename = filename + ".xml";
+        }
+
+        byte[] data = SerializationUtils.serialize((Serializable) resource.getContent());
+        String encodedString = Base64Utils.encode(data);
+        String response = dpClient.setFile("local://" +filename,encodedString);
+        LOG.info("new File: "+ filename +"added to DP store" + response);
     }
 
     private void writeContentToFile(Resource resource) {
